@@ -1,6 +1,8 @@
+require('dotenv').config();
 const express = require('express');
 const app = express();
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
 app.use(express.json());
 
@@ -25,7 +27,7 @@ app.post('/signup', async (req, res) => {
       password: hashedPassword
     };
     users.push(user);
-    res.status(201).send(users);
+    res.status(201).send('Signup Successful!');
   } catch (error) {
     req.send(error);
   }
@@ -39,7 +41,11 @@ app.post('/login', async (req, res) => {
 
   try {
     if(await bcrypt.compare(req.body.password, user.password)) {
-      res.send('Success');
+      const payload = {
+        name: req.body.name
+      }
+      const jwtToken = jwt.sign(payload, process.env.ACCESS_TOKEN_SECRET);
+      res.json({ token: jwtToken });
     } else {
       res.send('Not allowed');
     }
@@ -48,8 +54,21 @@ app.post('/login', async (req, res) => {
   }
 });
 
-app.get('/posts', (req, res) => {
-  res.json(posts);
+app.get('/posts', authenticateToken, (req, res) => {
+  res.json(posts.filter(post => post.username === req.user.name));
 });
+
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader.split(' ')[1];
+
+  if(token === null) return res.status(401).send();
+
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+    if(err) return res.status(403).send();
+    req.user = user;
+    next();
+  })
+}
 
 app.listen(3000);
